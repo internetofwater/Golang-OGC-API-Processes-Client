@@ -55,7 +55,7 @@ func (s *ProcessTestSuite) TestExecuteSync() {
 
 	response, err := client.ExecuteSync("hello-world", map[string]any{"name": "test"})
 	s.Require().NoError(err)
-	s.Require().Equal("Hello test!", response.Value)
+	s.Require().Equal("Hello test!", response.Outputs["value"])
 }
 
 // Run the entire test suite

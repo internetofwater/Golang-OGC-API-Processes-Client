@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"strings"
 )
 
 // A client for the OGC API Processes Spec
@@ -155,12 +156,20 @@ func (c *ProcessesClient) ExecuteAsync(processID string, inputs ...map[string]an
 	if err != nil {
 		return "", err
 	}
-	for _, header := range response.headers {
-		if header[0] == "Location" {
-			return header[1], nil
-		}
+	if response.bodyBytes != nil {
+		return "", fmt.Errorf("async responses should not have a body")
+	}
+
+	locations, ok := response.headers["Location"]
+	if ok {
+		return locations[0], nil
 	}
 	return "", fmt.Errorf("no job url found in response")
+}
+
+type OutputResponse struct {
+	Id    string `json:"id"`
+	Value any    `json:"value"`
 }
 
 func (c *ProcessesClient) ExecuteSync(processID string, inputs ...map[string]any) (SyncExecuteResponse, error) {
@@ -170,16 +179,24 @@ func (c *ProcessesClient) ExecuteSync(processID string, inputs ...map[string]any
 	}
 
 	var executeResponse SyncExecuteResponse
-	err = json.Unmarshal(response.bodyBytes, &executeResponse)
+	var outputs map[string]any
+	err = json.Unmarshal(response.bodyBytes, &outputs)
 	if err != nil {
 		return SyncExecuteResponse{}, err
 	}
+
+	executeResponse.Outputs = outputs
+	locations, ok := response.headers["Location"]
+	if ok {
+		executeResponse.JobUrl = locations[0]
+	}
+
 	return executeResponse, nil
 }
 
 type SyncExecuteResponse struct {
-	ID    string `json:"id"`
-	Value string `json:"value"`
+	Outputs map[string]any
+	JobUrl  JobUrl
 }
 
 type executeResponse struct {
@@ -203,8 +220,8 @@ func (c *ProcessesClient) execute(processID string, mode ProcessExecutionMode, i
 	}
 
 	payload := map[string]any{
-		"mode":   mode,
 		"inputs": mergedInputs,
+		"mode":   mode,
 	}
 
 	// Convert payload to JSON
@@ -218,6 +235,9 @@ func (c *ProcessesClient) execute(processID string, mode ProcessExecutionMode, i
 		return executeResponse{}, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if mode == Async {
+		req.Header.Set("Prefer", "response-async")
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -235,4 +255,78 @@ func (c *ProcessesClient) execute(processID string, mode ProcessExecutionMode, i
 	}
 
 	return executeResponse{bodyBytes: bodyBytes, headers: resp.Header}, nil
+}
+
+type JobStatusResponse struct {
+	ProcessID string  `json:"processID"`
+	JobID     string  `json:"jobID"`
+	Status    string  `json:"status"`
+	Message   string  `json:"message"`
+	Progress  float64 `json:"progress"`
+	Created   string  `json:"created"`
+	Started   string  `json:"started"`
+	Finished  string  `json:"finished"`
+	Updated   string  `json:"updated"`
+	Links     []Link  `json:"links"`
+}
+
+func (c *ProcessesClient) JobStatus(jobUrl JobUrl) (JobStatusResponse, error) {
+
+	var absoluteUrl string
+	if !strings.Contains(jobUrl, "/") {
+		absoluteUrl = c.BaseUrl + "/" + jobUrl
+	} else {
+		absoluteUrl = jobUrl
+	}
+
+	response, err := c.httpClient.Get(absoluteUrl + "?f=json")
+	if err != nil {
+		return JobStatusResponse{}, err
+	}
+
+	defer func() { _ = response.Body.Close() }()
+
+	bodyBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		return JobStatusResponse{}, err
+	}
+
+	if response.StatusCode >= 400 {
+		bodyAsString := string(bodyBytes)
+		return JobStatusResponse{}, fmt.Errorf("error fetching job status: %s", bodyAsString)
+	}
+
+	var jobStatus JobStatusResponse
+	err = json.Unmarshal(bodyBytes, &jobStatus)
+	return jobStatus, err
+}
+
+func (c *ProcessesClient) GetJobResults(jobUrl JobUrl) (any, error) {
+	var absoluteUrl string
+	if !strings.Contains(jobUrl, "/") {
+		absoluteUrl = c.BaseUrl + "/" + jobUrl
+	} else {
+		absoluteUrl = jobUrl
+	}
+
+	response, err := c.httpClient.Get(absoluteUrl + "/results?f=json")
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = response.Body.Close() }()
+
+	bodyBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if response.StatusCode >= 400 {
+		bodyAsString := string(bodyBytes)
+		return nil, fmt.Errorf("error fetching job results: %s", bodyAsString)
+	}
+
+	var results any
+	err = json.Unmarshal(bodyBytes, &results)
+	return results, err
 }
