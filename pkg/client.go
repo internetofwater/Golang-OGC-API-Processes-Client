@@ -182,17 +182,17 @@ type SyncExecuteResponse struct {
 	Value string `json:"value"`
 }
 
-type ExecuteResponse struct {
+type executeResponse struct {
 	bodyBytes []byte
 	headers   http.Header
 }
 
-func (c *ProcessesClient) execute(processID string, mode ProcessExecutionMode, inputs ...map[string]any) (ExecuteResponse, error) {
+func (c *ProcessesClient) execute(processID string, mode ProcessExecutionMode, inputs ...map[string]any) (executeResponse, error) {
 	if processID == "" {
-		return ExecuteResponse{}, fmt.Errorf("process name cannot be empty")
+		return executeResponse{}, fmt.Errorf("process name cannot be empty")
 	}
 	if mode != Sync && mode != Async {
-		return ExecuteResponse{}, fmt.Errorf("invalid mode: %s; mode must be sync or async", mode)
+		return executeResponse{}, fmt.Errorf("invalid mode: %s; mode must be sync or async", mode)
 	}
 
 	url := c.BaseUrl + "/processes/" + processID + "/execution?f=json"
@@ -210,29 +210,29 @@ func (c *ProcessesClient) execute(processID string, mode ProcessExecutionMode, i
 	// Convert payload to JSON
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return ExecuteResponse{}, fmt.Errorf("failed to marshal payload: %w", err)
+		return executeResponse{}, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(jsonData))
 	if err != nil {
-		return ExecuteResponse{}, fmt.Errorf("failed to create request: %w", err)
+		return executeResponse{}, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return ExecuteResponse{}, err
+		return executeResponse{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ExecuteResponse{}, err
+		return executeResponse{}, err
 	}
 
 	if resp.StatusCode >= 400 {
 		bodyAsString := string(bodyBytes)
-		return ExecuteResponse{}, fmt.Errorf("error in process execution: %s", bodyAsString)
+		return executeResponse{}, fmt.Errorf("error in process execution: %s", bodyAsString)
 	}
 
-	return ExecuteResponse{bodyBytes: bodyBytes, headers: resp.Header}, nil
+	return executeResponse{bodyBytes: bodyBytes, headers: resp.Header}, nil
 }
