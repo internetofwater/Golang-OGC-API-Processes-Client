@@ -209,11 +209,20 @@ func (c *ProcessesClient) execute(processID string, mode ProcessExecutionMode, i
 		return ExecuteResponse{}, fmt.Errorf("error in process execution: %s", bodyAsString)
 	}
 
+	var jobUrl string
+	headers := resp.Header
+	for k, v := range headers {
+		if k == "Location" {
+			jobUrl = v[0]
+		}
+	}
+
 	var executeResponse ExecuteResponse
 	err = json.Unmarshal(bodyBytes, &executeResponse)
 	if err != nil {
 		return ExecuteResponse{}, err
 	}
 
+	executeResponse.JobUrl = jobUrl
 	return executeResponse, nil
 }
