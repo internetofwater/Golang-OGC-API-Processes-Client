@@ -167,11 +167,6 @@ func (c *ProcessesClient) ExecuteAsync(processID string, inputs ...map[string]an
 	return "", fmt.Errorf("no job url found in response")
 }
 
-type OutputResponse struct {
-	Id    string `json:"id"`
-	Value any    `json:"value"`
-}
-
 func (c *ProcessesClient) ExecuteSync(processID string, inputs ...map[string]any) (SyncExecuteResponse, error) {
 	response, err := c.execute(processID, Sync, inputs...)
 	if err != nil {
