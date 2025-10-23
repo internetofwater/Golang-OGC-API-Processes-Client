@@ -70,7 +70,7 @@ func (c *ProcessesClient) ListProcesses() (ProcessInfoResponse, error) {
 		return ProcessInfoResponse{}, err
 	}
 
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		return ProcessInfoResponse{}, err
@@ -126,7 +126,7 @@ func (c *ProcessesClient) GetProcessInfo(processId string) (ProcessInfo, error) 
 		return ProcessInfo{}, err
 	}
 
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		return ProcessInfo{}, err
@@ -198,7 +198,7 @@ func (c *ProcessesClient) execute(processID string, mode ProcessExecutionMode, i
 	if err != nil {
 		return ExecuteResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return ExecuteResponse{}, err
